@@ -1,0 +1,25 @@
+WpConnectTravelItenary
+            771    ObjWPCreateItineraryReq.WPSourceRegion = FLTIntTravelItineraryReq.FTCode;
+
+FlightFacadeTravelItnerary
+    GenerateFLTIntTravelItineraryReq()
+2782                       ObjTravelItineraryTransactionRequestInt.FTCode = ObjFLTIntTrvItiReq.WPSourceRegion;
+
+GeneratetarvelItenaryInternationalRequesting
+31017
+FlightAppSysytemFacade
+CreateItenararyInt()
+      if (this.Request.GlobalSettings.GeneralSettings.Settings.GenSettings.Hosting == "GCC" && ObjRes.Trips[0].Journey[0].ChannelCode=="WP")
+                {
+                    ObjCreateItineraryReq.WPSourceRegion = "WP" +"-"+ this.Request.GlobalSettings.GeneralSettings.Settings.GenSettings.Region;
+                }
+
+CreateIrvalidation
+
+  if (ObjFI.Trips[0].Journey[0].ChannelCode == "WP" && !new[] { "IN", "ML" }.Contains(objReq.WPSourceRegion))
+                    {
+                        TravelCheckListRes = null;
+                    }
+
+ public string WPSourceRegion;
+
