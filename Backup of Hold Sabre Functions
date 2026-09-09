@@ -1,0 +1,179 @@
+ private void GetHoldDetailsFromReservation2()
+        {
+            List<string> ADTK = new List<string>();
+
+
+            try
+            {
+              
+                    if (objReservation != null &&
+            objReservation.OpenReservationElements != null &&
+            objReservation.OpenReservationElements.OpenReservationElement != null)
+                    {
+                        var item = objReservation.OpenReservationElements.OpenReservationElement
+                            .FirstOrDefault(x =>
+                            {
+                                if (x?.Item == null)
+                                    return false;
+
+                                var itemType = x.Item.GetType();
+
+                                var code = itemType.GetProperty("code")?
+                                    .GetValue(x.Item)?
+                                    .ToString();
+
+                                var fullText = itemType.GetProperty("FullText")?
+                                    .GetValue(x.Item)?
+                                    .ToString();
+
+                    // ADTK
+                    if (string.Equals(code, "ADTK", StringComparison.OrdinalIgnoreCase))
+                                    return true;
+
+                    // OTHS
+                    if (string.Equals(code, "OTHS", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (string.IsNullOrWhiteSpace(fullText))
+                                        return false;
+
+                        // Use the existing date/time extraction logic
+                        return TryExtractDateTime(
+                                        fullText,
+                                      out string prefixq, out string dateq, out string timeq, out string suffixq);
+                                }
+
+                                return false;
+                            });
+                        /**/
+                        var fullTextValue = item?.Item?.GetType().GetProperty("FullText")?.GetValue(item.Item)?.ToString();
+
+                   // var fullTextValue2 = item2?.Item?.GetType().GetProperty("FullText")?.GetValue(item.Item)?.ToString();
+
+                    if (TryExtractDateTime(fullTextValue, out string prefix, out string date, out string time, out string suffix))
+                    {
+                        holdActualTimeLimt.Holdtime = $"{prefix} {date} {time} {suffix}";
+                    }
+                    holdActualTimeLimt.DepartureTime = objReservation?.PassengerReservation?.Segments?.Poc?.Departure;
+                    holdActualTimeLimt.CreationTimestamp = objReservation?.BookingDetails.CreationTimestamp;
+                }
+            }
+            catch (Exception ex)
+            {
+
+
+                Response.TransRemarks = "No HoldDetails properly get";
+                Response.TransStatus = true;
+                Response.TransCode = "1111";
+                LogError(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType.FullName, System.Reflection.MethodBase.GetCurrentMethod().Name, Response.TransRemarks);
+            }
+        }
+
+        private void GetHoldDetailsFromReservation3()
+        {
+            try
+            {
+                if (objReservation != null &&
+                    objReservation.OpenReservationElements != null &&
+                    objReservation.OpenReservationElements.OpenReservationElement != null)
+                {
+                    var reservationElements =
+                        objReservation.OpenReservationElements.OpenReservationElement;
+
+                    // 1. First check ADTK
+                    var adtkItem = reservationElements
+                        .FirstOrDefault(x =>
+                        {
+                            if (x?.Item == null)
+                                return false;
+
+                            var itemType = x.Item.GetType();
+
+                            var code = itemType.GetProperty("code")?
+                                .GetValue(x.Item)?
+                                .ToString();
+
+                            return string.Equals(
+                                code,
+                                "ADTK",
+                                StringComparison.OrdinalIgnoreCase);
+                        });
+
+                    if (adtkItem != null)
+                    {
+                        // ADTK: Directly assign FullText to Holdtime
+                        var itemType = adtkItem.Item.GetType();
+
+                        var fullText = itemType.GetProperty("FullText")?
+                            .GetValue(adtkItem.Item)?
+                            .ToString();
+
+                        if (!string.IsNullOrWhiteSpace(fullText))
+                        {
+                            holdActualTimeLimt.Holdtime = fullText;
+                        }
+                    }
+                    else
+                    {
+                        // 2. ADTK not found, so check OTHS
+                        var othItem = reservationElements
+                            .FirstOrDefault(x =>
+                            {
+                                if (x?.Item == null)
+                                    return false;
+
+                                var itemType = x.Item.GetType();
+
+                                var code = itemType.GetProperty("code")?
+                                    .GetValue(x.Item)?
+                                    .ToString();
+
+                                return string.Equals(
+                                    code,
+                                    "OTHS",
+                                    StringComparison.OrdinalIgnoreCase);
+                            });
+
+                        if (othItem != null)
+                        {
+                            // Get OTHS FullText
+                            var itemType = othItem.Item.GetType();
+
+                            var fullText = itemType.GetProperty("FullText")?
+                                .GetValue(othItem.Item)?
+                                .ToString();
+
+                            if (!string.IsNullOrWhiteSpace(fullText))
+                            {
+                                // Extract date/time from OTHS FullText
+                                if (TryExtractDateTime(
+                                    fullText,
+                                    out string prefix,
+                                    out string date,
+                                    out string time,
+                                    out string suffix))
+                                {
+                                    holdActualTimeLimt.Holdtime =
+                                        $"{prefix} {date} {time} {suffix}";
+                                }
+                            }
+                        }
+                    }
+
+                    // Common logic
+                    holdActualTimeLimt.DepartureTime =
+                        objReservation?.PassengerReservation?.Segments?.Poc?.Departure;
+                    holdActualTimeLimt.CreationTimestamp = objReservation?.BookingDetails.CreationTimestamp;
+                }
+            }
+            catch (Exception ex)
+            {
+                Response.TransRemarks = "No HoldDetails properly get";
+                Response.TransStatus = true;
+                Response.TransCode = "1111";
+
+                LogError(
+                    System.Reflection.MethodBase.GetCurrentMethod().DeclaringType.FullName,
+                    System.Reflection.MethodBase.GetCurrentMethod().Name,
+                    Response.TransRemarks);
+            }
+        }
