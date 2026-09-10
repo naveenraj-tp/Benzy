@@ -1,0 +1,250 @@
+Functions 10-09-2026
+
+
+   private DateTime ConvertUaeServerTimeToUtc(DateTime bookingDate)
+        {
+            TimeZoneInfo uaeTimeZone =
+                TimeZoneInfo.FindSystemTimeZoneById("Arabian Standard Time");
+
+            return TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(
+                    bookingDate,
+                    DateTimeKind.Unspecified),
+                uaeTimeZone);
+        }
+        private static readonly Dictionary<string, string> LocationTimeZoneMap =new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        // UAE
+        { "DXB", "Arabian Standard Time" },
+        { "AUH", "Arabian Standard Time" },
+        { "SHJ", "Arabian Standard Time" },
+
+        // Saudi Arabia
+        { "JED", "Arab Standard Time" },
+        { "RUH", "Arab Standard Time" },
+        { "DMM", "Arab Standard Time" },
+        { "MED", "Arab Standard Time" },
+
+        // Oman
+        { "MCT", "Arabian Standard Time" },
+
+        // Qatar
+        { "DOH", "Arab Standard Time" },
+
+        // Kuwait
+        { "KWI", "Arab Standard Time" },
+
+        // Bahrain
+        { "BAH", "Arab Standard Time" },
+
+        // Pakistan
+        { "KHI", "Pakistan Standard Time" },
+        { "LHE", "Pakistan Standard Time" },
+        { "ISB", "Pakistan Standard Time" },
+
+        // India
+        { "DEL", "India Standard Time" },
+        { "BOM", "India Standard Time" },
+        { "MAA", "India Standard Time" },
+        { "COK", "India Standard Time" },
+        { "BLR", "India Standard Time" },
+
+        // UTC / GMT
+        { "GMT", "UTC" },
+        { "UTC", "UTC" }
+    };
+
+        private DateTime ConvertToUtc( DateTime localDateTime,string locationCode)
+        {
+            if (!LocationTimeZoneMap.TryGetValue(
+                    locationCode,
+                    out string timeZoneId))
+            {
+                throw new Exception(
+                    "Unknown Sabre timezone/location code: " +
+                    locationCode);
+            }
+
+            TimeZoneInfo timeZone =
+                TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+
+            return TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(
+                    localDateTime,
+                    DateTimeKind.Unspecified),
+                timeZone);
+        }
+        private DateTime ConvertSabreTimeToUtc( DateTime sabreLocalDateTime,string timeZoneCode)
+        {
+            if (string.IsNullOrWhiteSpace(timeZoneCode))
+            {
+                throw new Exception(
+                    "Sabre timezone/location code is empty.");
+            }
+
+            if (!LocationTimeZoneMap.TryGetValue(
+                    timeZoneCode.Trim().ToUpperInvariant(),
+                    out string timeZoneId))
+            {
+                throw new Exception(
+                    "Unknown Sabre timezone/location code: " +
+                    timeZoneCode);
+            }
+
+            TimeZoneInfo timeZone =
+                TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+
+            return TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(
+                    sabreLocalDateTime,
+                    DateTimeKind.Unspecified),
+                timeZone);
+        }
+        private string HoldTimeCalculation2(string Input,DateTime BookingDate )
+        {
+            try
+            {
+                LogError(
+                    System.Reflection.MethodBase.GetCurrentMethod()
+                        .DeclaringType.FullName,
+                    System.Reflection.MethodBase.GetCurrentMethod().Name,
+                    "HoldTimefromProvider - FlightFacadeBooking - " + Input);
+
+
+                // Parse Sabre hold/expiry date and time
+                string holdTimeZoneCode;
+
+                DateTime holdLocalDateTime =
+                    ParseSabreHoldTime(
+                        Input,
+                        BookingDate.Year,
+                        out holdTimeZoneCode);
+
+
+                // Convert Sabre hold time to UTC
+                DateTime holdUtc =
+                    ConvertToUtc(
+                        holdLocalDateTime,
+                        holdTimeZoneCode);
+
+
+                // BookingDate is also received from provider.
+                // Convert it using the provider timezone code.
+                DateTime bookingUtc =
+                    ConvertToUtc(
+                        BookingDate,
+                        holdTimeZoneCode);
+
+
+                // Calculate actual hold duration
+                TimeSpan diff =
+                    holdUtc - bookingUtc;
+
+
+                if (diff.TotalSeconds < 0)
+                {
+                    return "00:00";
+                }
+
+
+                int totalHours =
+                    (int)diff.TotalHours;
+
+                int minutes =
+                    diff.Minutes;
+
+
+                // Round seconds up to the next minute
+                if (diff.Seconds > 0)
+                {
+                    minutes++;
+
+                    if (minutes == 60)
+                    {
+                        minutes = 0;
+                        totalHours++;
+                    }
+                }
+
+
+                return $"{totalHours:D2}:{minutes:D2}";
+            }
+            catch (Exception ex)
+            {
+                LogError(
+                    System.Reflection.MethodBase.GetCurrentMethod()
+                        .DeclaringType.FullName,
+                    System.Reflection.MethodBase.GetCurrentMethod().Name,
+                    ex.ToString());
+
+                return "00:00";
+            }
+        }
+
+        private DateTime ParseSabreHoldTime( string input, int defaultYear,out string locationCode)
+        {
+            locationCode = string.Empty;
+
+            // Example:
+            // BY DXB02JUN26/1619 OR CXL CZ BOOKING
+            Match locationFormat = Regex.Match(
+                input,
+                @"BY\s+([A-Z]{3})(\d{2}[A-Z]{3}\d{2})/(\d{4})",
+                RegexOptions.IgnoreCase);
+
+            if (locationFormat.Success)
+            {
+                locationCode =
+                    locationFormat.Groups[1].Value.ToUpperInvariant();
+
+                string dateValue =
+                    locationFormat.Groups[2].Value.ToUpperInvariant();
+
+                string timeValue =
+                    locationFormat.Groups[3].Value;
+
+                DateTime localDateTime = DateTime.ParseExact(
+                    dateValue + timeValue,
+                    "ddMMMyyHHmm",
+                    CultureInfo.InvariantCulture);
+
+                return DateTime.SpecifyKind(
+                    localDateTime,
+                    DateTimeKind.Unspecified);
+            }
+
+
+            // Example:
+            // BY 10SEP 0801 GMT OR SUBJECT TO CANCEL
+            Match gmtFormat = Regex.Match(
+                input,
+                @"BY\s+(\d{2})([A-Z]{3})\s+(\d{4})\s+(GMT|UTC)\b",
+                RegexOptions.IgnoreCase);
+
+            if (gmtFormat.Success)
+            {
+                locationCode =
+                    gmtFormat.Groups[4].Value.ToUpperInvariant();
+
+                string dateValue =
+                    gmtFormat.Groups[1].Value +
+                    gmtFormat.Groups[2].Value +
+                    defaultYear.ToString();
+
+                string timeValue =
+                    gmtFormat.Groups[3].Value;
+
+                DateTime localDateTime = DateTime.ParseExact(
+                    dateValue + timeValue,
+                    "ddMMMyyyyHHmm",
+                    CultureInfo.InvariantCulture);
+
+                return DateTime.SpecifyKind(
+                    localDateTime,
+                    DateTimeKind.Unspecified);
+            }
+
+
+            throw new Exception(
+                "Sabre hold time format not recognized: " + input);
+        }
